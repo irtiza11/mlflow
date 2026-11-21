@@ -39,6 +39,7 @@ CREATE TABLE registered_models (
 	creation_time BIGINT,
 	last_updated_time BIGINT,
 	description VARCHAR(5000) COLLATE "SQL_Latin1_General_CP1_CI_AS",
+	parent_name VARCHAR(256) COLLATE "SQL_Latin1_General_CP1_CI_AS",
 	CONSTRAINT registered_model_pk PRIMARY KEY (name)
 )
 

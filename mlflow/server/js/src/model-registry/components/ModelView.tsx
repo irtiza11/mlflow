@@ -26,6 +26,7 @@ import { ModelVersionInfoEntity, type ModelEntity } from '../../experiment-track
 import { shouldShowModelsNextUI } from '../../common/utils/FeatureUtils';
 import { ModelsNextUIToggleSwitch } from './ModelsNextUIToggleSwitch';
 import { withNextModelsUIContext } from '../hooks/useNextModelsUI';
+import { ModelHierarchySection } from './ModelHierarchySection';
 
 export const StageFilters = {
   ALL: 'ALL',
@@ -307,6 +308,11 @@ export class ModelViewImpl extends React.Component<ModelViewImplProps, ModelView
             showEditor={showDescriptionEditor}
           />
         </CollapsibleSection>
+        <ModelHierarchySection
+          modelName={modelName}
+          parentName={model?.parent_name}
+          onParentChanged={this.props.onMetadataUpdated}
+        />
         <div data-test-id="tags-section">
           <CollapsibleSection
             title={
@@ -454,6 +460,9 @@ export class ModelViewImpl extends React.Component<ModelViewImplProps, ModelView
         />
       </Link>,
     ];
+    if (model?.parent_name) {
+      breadcrumbs.push(<Link to={ModelRegistryRoutes.getModelPageRoute(model.parent_name)}>{model.parent_name}</Link>);
+    }
     return (
       <div>
         <PageHeader title={modelName} breadcrumbs={breadcrumbs}>

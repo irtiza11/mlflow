@@ -655,6 +655,10 @@
     "defaultMessage": "Failed",
     "description": "Run page > Overview > Run status cell > Value for failed state"
   },
+  "AT7JoW": {
+    "defaultMessage": "Cancel",
+    "description": "Cancel button in the change parent model modal"
+  },
   "AW2rVK": {
     "defaultMessage": "Max. no of runs shown",
     "description": "Label for the control allowing selection of number of runs displayed in a compare runs chart"
@@ -707,6 +711,10 @@
     "defaultMessage": "100",
     "description": "Label for 100 first runs visible in run count selector within runs compare configuration modal"
   },
+  "BeKv6H": {
+    "defaultMessage": "Change parent model",
+    "description": "Title of the modal to change the parent registered model"
+  },
   "Bnruyp": {
     "defaultMessage": "500",
     "description": "Label for 500 first runs visible in run count selector within runs compare configuration modal"
@@ -734,6 +742,10 @@
   "Cj2i02": {
     "defaultMessage": "Error",
     "description": "Experiment page > traces table > error state title"
+  },
+  "CjPlNK": {
+    "defaultMessage": "Save",
+    "description": "Save button in the change parent model modal"
   },
   "CpLnGS": {
     "defaultMessage": "Metrics",
@@ -830,6 +842,10 @@
   "EpFST9": {
     "defaultMessage": "No trace data recorded",
     "description": "Experiment page > traces data drawer > no trace data recorded empty state"
+  },
+  "Euz5xQ": {
+    "defaultMessage": "None (top-level model)",
+    "description": "Shown when a registered model has no parent model"
   },
   "EwAZgg": {
     "defaultMessage": "Edit tags",
@@ -1111,6 +1127,10 @@
     "defaultMessage": "No traces found with the current filter query. <button>Reset filters</button> to see all traces.",
     "description": "Experiment page > traces table > no traces recorded"
   },
+  "LgjP6H": {
+    "defaultMessage": "No sub-models. Create a model with this model as its parent, or set the parent of an existing model.",
+    "description": "Empty state for the sub-models list on the model view page"
+  },
   "Li72QU": {
     "defaultMessage": "Add",
     "description": "Key-value tag table cell > 'add' button label"
@@ -1367,6 +1387,10 @@
     "defaultMessage": "A tag key is required",
     "description": "Key-value tag editor modal > Tag dropdown > Tag key required error message"
   },
+  "RlK3nK": {
+    "defaultMessage": "Parent model:",
+    "description": "Label for the parent registered model on the model view page"
+  },
   "RlRsah": {
     "defaultMessage": "loading...",
     "description": "Loading spinner text to show that the artifact loading is in progress"
@@ -1511,6 +1535,10 @@
     "defaultMessage": "using Prompt Engineering",
     "description": "String for creating a new run with prompt engineering modal"
   },
+  "UwWxls": {
+    "defaultMessage": "Parent model",
+    "description": "Column title for the parent registered model in the registered model list page"
+  },
   "UzZf+2": {
     "defaultMessage": "Add chart",
     "description": "Confirm button label within a modal when adding a new runs comparison chart"
@@ -1614,6 +1642,10 @@
   "X+boXI": {
     "defaultMessage": "Copied",
     "description": "Tooltip text shown when copy operation completes"
+  },
+  "X2jGkm": {
+    "defaultMessage": "Change parent",
+    "description": "Button to change the parent registered model on the model view page"
   },
   "X3F7x3": {
     "defaultMessage": "No Artifacts Recorded",
@@ -2023,6 +2055,10 @@
     "defaultMessage": "Error",
     "description": "Experiment page > traces data drawer > error state title"
   },
+  "ebm0av": {
+    "defaultMessage": "Model hierarchy",
+    "description": "Title text for the parent / sub-model section on the model view page"
+  },
   "eeLqSn": {
     "defaultMessage": "Submit",
     "description": "Experiment page > artifact compare view > \"add new row\" modal submit button label"
@@ -2106,6 +2142,10 @@
   "g7xNvF": {
     "defaultMessage": "Display points",
     "description": "Runs charts > line chart > display points > label"
+  },
+  "gBfwaG": {
+    "defaultMessage": "Parent model name",
+    "description": "Placeholder for the parent model name input"
   },
   "gC2Kxm": {
     "defaultMessage": "Give instructions to the model. Use '{{ }}' or the \"Add new variable\" button to add variables to your prompt.",
@@ -2583,6 +2623,10 @@
     "defaultMessage": "Stop evaluating",
     "description": "Experiment page > artifact compare view > run column header > \"Evaluate all\" button label when the column is being evaluated"
   },
+  "psQldk": {
+    "defaultMessage": "Sub-models ({count})",
+    "description": "Label for the list of sub-models of a registered model"
+  },
   "q/Z61H": {
     "defaultMessage": "You are exceeding a limit of {limit} aliases assigned to the single model version",
     "description": "Model registry > model version alias editor > Warning about exceeding aliases limit"
@@ -2798,6 +2842,10 @@
   "umeTwG": {
     "defaultMessage": "Latest",
     "description": "Column title for the column displaying the latest metric values for a metric"
+  },
+  "uo8p2B": {
+    "defaultMessage": "Enter the name of an existing registered model to group {name} under. Leave empty to make it a top-level model.",
+    "description": "Help text in the change parent model modal"
   },
   "uq6CTI": {
     "defaultMessage": "No profile available",

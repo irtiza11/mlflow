@@ -15,6 +15,12 @@ def _raise_unsupported_method(method, message=None):
 
 
 class DatabricksWorkspaceModelRegistryRestStore(RestStore):
+    # The Databricks workspace registry does not implement the sub-model (parent_name) API.
+    supports_model_hierarchy = False
+
+    def set_registered_model_parent(self, name, parent_name):
+        _raise_unsupported_method(method="set_registered_model_parent")
+
     def set_registered_model_alias(self, name, alias, version):
         _raise_unsupported_method(method="set_registered_model_alias")
 

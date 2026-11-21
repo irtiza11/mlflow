@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     PrimaryKeyConstraint,
     String,
@@ -33,7 +34,16 @@ class SqlRegisteredModel(Base):
 
     description = Column(String(5000), nullable=True)
 
-    __table_args__ = (PrimaryKeyConstraint("name", name="registered_model_pk"),)
+    # Name of the parent registered model (sub-model hierarchy). Referential integrity (parent
+    # exists, no cycles, rename propagation, delete protection) is enforced by the store rather
+    # than a self-referencing foreign key, because MySQL and MSSQL do not support cascading
+    # updates on self-referencing foreign keys.
+    parent_name = Column(String(256), nullable=True, default=None)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("name", name="registered_model_pk"),
+        Index("index_registered_models_parent_name", "parent_name"),
+    )
 
     def __repr__(self):
         return (
@@ -58,6 +68,7 @@ class SqlRegisteredModel(Base):
             [mvd.to_mlflow_entity() for mvd in latest_versions.values()],
             [tag.to_mlflow_entity() for tag in self.registered_model_tags],
             [alias.to_mlflow_entity() for alias in self.registered_model_aliases],
+            parent_name=self.parent_name,
         )
 
 

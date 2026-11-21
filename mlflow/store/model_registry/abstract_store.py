@@ -5,7 +5,7 @@ from time import sleep, time
 from mlflow.entities.model_registry import ModelVersionTag
 from mlflow.entities.model_registry.model_version_status import ModelVersionStatus
 from mlflow.exceptions import MlflowException
-from mlflow.protos.databricks_pb2 import RESOURCE_ALREADY_EXISTS, ErrorCode
+from mlflow.protos.databricks_pb2 import NOT_IMPLEMENTED, RESOURCE_ALREADY_EXISTS, ErrorCode
 from mlflow.utils.annotations import developer_stable
 from mlflow.utils.logging_utils import eprint
 
@@ -21,6 +21,12 @@ class AbstractStore:
     """
 
     __metaclass__ = ABCMeta
+
+    #: Whether this store supports grouping registered models into a parent / sub-model
+    #: hierarchy (``parent_name``). Stores that support it accept a ``parent_name`` keyword
+    #: argument in :py:meth:`create_registered_model` and implement
+    #: :py:meth:`set_registered_model_parent`.
+    supports_model_hierarchy = False
 
     def __init__(self, store_uri=None, tracking_uri=None):
         """
@@ -125,6 +131,24 @@ class AbstractStore:
         Returns:
             A single :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
         """
+
+    def set_registered_model_parent(self, name, parent_name):
+        """
+        Set (or clear) the parent of a registered model, making it a sub-model of
+        ``parent_name``.
+
+        Args:
+            name: Registered model name.
+            parent_name: Name of the new parent registered model. ``None`` or an empty string
+                detaches the model so it becomes a top-level model.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+        """
+        raise MlflowException(
+            f"{type(self).__name__} does not support registered model hierarchies.",
+            error_code=NOT_IMPLEMENTED,
+        )
 
     @abstractmethod
     def get_latest_versions(self, name, stages=None):

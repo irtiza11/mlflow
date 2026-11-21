@@ -39,6 +39,7 @@ enum ColumnKeys {
   STAGE_PRODUCTION = 'stage_production',
   TAGS = 'tags',
   ALIASED_VERSIONS = 'aliased_versions',
+  PARENT = 'parent_name',
 }
 
 export interface ModelListTableProps {
@@ -161,6 +162,24 @@ export const ModelListTable = ({
     }
 
     columns.push(
+      {
+        id: ColumnKeys.PARENT,
+        header: intl.formatMessage({
+          defaultMessage: 'Parent model',
+          description: 'Column title for the parent registered model in the registered model list page',
+        }),
+        accessorKey: 'parent_name',
+        enableSorting: false,
+        cell: ({ getValue }) => {
+          const parentName = getValue() as string | undefined;
+          return parentName ? (
+            <Link to={ModelRegistryRoutes.getModelPageRoute(parentName)} title={parentName}>
+              {parentName}
+            </Link>
+          ) : null;
+        },
+        meta: { styles: { flex: 1 } },
+      },
       {
         id: ColumnKeys.CREATED_BY,
         header: intl.formatMessage({

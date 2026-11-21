@@ -8,6 +8,7 @@ import logging
 
 from mlflow.entities.model_registry import ModelVersionTag, RegisteredModelTag
 from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import NOT_IMPLEMENTED
 from mlflow.store.model_registry import (
     SEARCH_MODEL_VERSION_MAX_RESULTS_DEFAULT,
     SEARCH_REGISTERED_MODEL_MAX_RESULTS_DEFAULT,
@@ -16,6 +17,13 @@ from mlflow.tracking._model_registry import DEFAULT_AWAIT_MAX_SLEEP_SECONDS, uti
 from mlflow.utils.arguments_utils import _get_arg_names
 
 _logger = logging.getLogger(__name__)
+
+
+def _quote_filter_value(value):
+    # Search filter values must be quoted; pick a quote character not contained in the value.
+    if "'" in value and '"' not in value:
+        return f'"{value}"'
+    return "'" + value.replace("'", "\\'") + "'"
 
 
 class ModelRegistryClient:
@@ -43,7 +51,16 @@ class ModelRegistryClient:
 
     # Registered Model Methods
 
-    def create_registered_model(self, name, tags=None, description=None):
+    def _assert_hierarchy_supported(self):
+        store = self.store
+        if not getattr(store, "supports_model_hierarchy", False):
+            raise MlflowException(
+                f"The model registry store {type(store).__name__} does not support sub-models.",
+                error_code=NOT_IMPLEMENTED,
+            )
+        return store
+
+    def create_registered_model(self, name, tags=None, description=None, parent_name=None):
         """Create a new registered model in backend store.
 
         Args:
@@ -51,6 +68,7 @@ class ModelRegistryClient:
             tags: A dictionary of key-value pairs that are converted into
                 :py:class:`mlflow.entities.model_registry.RegisteredModelTag` objects.
             description: Description of the model.
+            parent_name: Optional name of an existing registered model to group this model under.
 
         Returns:
             A single object of :py:class:`mlflow.entities.model_registry.RegisteredModel`
@@ -61,7 +79,61 @@ class ModelRegistryClient:
         #       Those are constraints applicable to any backend, given the model URI format.
         tags = tags if tags else {}
         tags = [RegisteredModelTag(key, str(value)) for key, value in tags.items()]
+        if parent_name:
+            return self._assert_hierarchy_supported().create_registered_model(
+                name, tags, description, parent_name=parent_name
+            )
         return self.store.create_registered_model(name, tags, description)
+
+    def set_registered_model_parent(self, name, parent_name):
+        """Set or clear the parent of a registered model.
+
+        Args:
+            name: Name of the registered model to move.
+            parent_name: Name of the new parent, or ``None`` to make it a top-level model.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+        """
+        return self._assert_hierarchy_supported().set_registered_model_parent(name, parent_name)
+
+    def get_sub_models(self, name, recursive=False):
+        """List the sub-models of a registered model.
+
+        Args:
+            name: Name of the parent registered model.
+            recursive: If ``True``, return all descendants (breadth-first), not just direct
+                children.
+
+        Returns:
+            A list of :py:class:`mlflow.entities.model_registry.RegisteredModel` objects.
+        """
+        store = self._assert_hierarchy_supported()
+        store.get_registered_model(name)  # raise RESOURCE_DOES_NOT_EXIST early
+        result, queue, visited = [], [name], {name}
+        while queue:
+            current = queue.pop(0)
+            page_token = None
+            while True:
+                page = store.search_registered_models(
+                    filter_string=f"parent_name = {_quote_filter_value(current)}",
+                    max_results=SEARCH_REGISTERED_MODEL_MAX_RESULTS_DEFAULT,
+                    order_by=["name ASC"],
+                    page_token=page_token,
+                )
+                for rm in page:
+                    if rm.name in visited:
+                        continue
+                    visited.add(rm.name)
+                    result.append(rm)
+                    if recursive:
+                        queue.append(rm.name)
+                page_token = page.token
+                if not page_token:
+                    break
+            if not recursive:
+                break
+        return result
 
     def update_registered_model(self, name, description):
         """Updates description for RegisteredModel entity.

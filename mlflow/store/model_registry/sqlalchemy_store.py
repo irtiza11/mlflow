@@ -17,6 +17,7 @@ from mlflow.protos.databricks_pb2 import (
     INVALID_PARAMETER_VALUE,
     INVALID_STATE,
     RESOURCE_ALREADY_EXISTS,
+    RESOURCE_CONFLICT,
     RESOURCE_DOES_NOT_EXIST,
 )
 from mlflow.store.artifact.utils.models import _parse_model_uri
@@ -75,6 +76,8 @@ class SqlAlchemyStore(AbstractStore):
     """
 
     CREATE_MODEL_VERSION_RETRIES = 3
+
+    supports_model_hierarchy = True
 
     def __init__(self, db_uri):
         """
@@ -151,7 +154,7 @@ class SqlAlchemyStore(AbstractStore):
         # loading_relationships.html#relationship-loading-techniques
         return [sqlalchemy.orm.subqueryload(SqlModelVersion.model_version_tags)]
 
-    def create_registered_model(self, name, tags=None, description=None):
+    def create_registered_model(self, name, tags=None, description=None, parent_name=None):
         """
         Create a new registered model in backend store.
 
@@ -160,6 +163,7 @@ class SqlAlchemyStore(AbstractStore):
             tags: A list of :py:class:`mlflow.entities.model_registry.RegisteredModelTag`
                 instances associated with this registered model.
             description: Description of the version.
+            parent_name: Optional name of an existing registered model to group this model under.
 
         Returns:
             A single object of :py:class:`mlflow.entities.model_registry.RegisteredModel`
@@ -168,7 +172,17 @@ class SqlAlchemyStore(AbstractStore):
         _validate_model_name(name)
         for tag in tags or []:
             _validate_registered_model_tag(tag.key, tag.value)
+        parent_name = parent_name or None
+        if parent_name is not None:
+            _validate_model_name(parent_name)
+            if parent_name == name:
+                raise MlflowException.invalid_parameter_value(
+                    f"Registered model '{name}' cannot be its own parent."
+                )
         with self.ManagedSessionMaker() as session:
+            if parent_name is not None:
+                # Raises RESOURCE_DOES_NOT_EXIST if the parent does not exist.
+                self._get_registered_model(session, parent_name)
             try:
                 creation_time = get_current_time_millis()
                 registered_model = SqlRegisteredModel(
@@ -176,6 +190,7 @@ class SqlAlchemyStore(AbstractStore):
                     creation_time=creation_time,
                     last_updated_time=creation_time,
                     description=description,
+                    parent_name=parent_name,
                 )
                 tags_dict = {}
                 for tag in tags or []:
@@ -263,7 +278,17 @@ class SqlAlchemyStore(AbstractStore):
                     sql_model_version.name = new_name
                     sql_model_version.last_updated_time = updated_time
                 sql_registered_model.last_updated_time = updated_time
-                session.add_all([sql_registered_model] + sql_registered_model.model_versions)
+                # Re-point sub-models at the new name (no DB-level cascade, see SqlRegisteredModel).
+                sub_models = (
+                    session.query(SqlRegisteredModel)
+                    .filter(SqlRegisteredModel.parent_name == name)
+                    .all()
+                )
+                for sub_model in sub_models:
+                    sub_model.parent_name = new_name
+                session.add_all(
+                    [sql_registered_model] + sql_registered_model.model_versions + sub_models
+                )
                 session.flush()
                 return sql_registered_model.to_mlflow_entity()
             except sqlalchemy.exc.IntegrityError as e:
@@ -285,7 +310,62 @@ class SqlAlchemyStore(AbstractStore):
         """
         with self.ManagedSessionMaker() as session:
             sql_registered_model = self._get_registered_model(session, name)
+            sub_model_names = [
+                n
+                for (n,) in session.query(SqlRegisteredModel.name)
+                .filter(SqlRegisteredModel.parent_name == name)
+                .limit(6)
+                .all()
+            ]
+            if sub_model_names:
+                shown = ", ".join(sub_model_names[:5]) + (
+                    ", ..." if len(sub_model_names) > 5 else ""
+                )
+                raise MlflowException(
+                    f"Registered model '{name}' cannot be deleted because it has sub-models "
+                    f"({shown}). Delete them or move them to another parent first.",
+                    RESOURCE_CONFLICT,
+                )
             session.delete(sql_registered_model)
+
+    def set_registered_model_parent(self, name, parent_name):
+        """
+        Set (or clear) the parent of a registered model.
+
+        Args:
+            name: Registered model name.
+            parent_name: Name of the new parent registered model. ``None`` or an empty string
+                makes the model a top-level model.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+        """
+        parent_name = parent_name or None
+        with self.ManagedSessionMaker() as session:
+            sql_registered_model = self._get_registered_model(session, name)
+            if parent_name is not None:
+                self._get_registered_model(session, parent_name)
+                # Walk up from the proposed parent; if we reach `name`, this would create a cycle.
+                ancestor, seen = parent_name, set()
+                while ancestor is not None:
+                    if ancestor == name:
+                        raise MlflowException.invalid_parameter_value(
+                            f"Cannot set parent of registered model '{name}' to '{parent_name}': "
+                            "this would create a cycle in the model hierarchy."
+                        )
+                    if ancestor in seen:  # defensive: pre-existing corrupt data
+                        break
+                    seen.add(ancestor)
+                    ancestor = session.execute(
+                        select(SqlRegisteredModel.parent_name).where(
+                            SqlRegisteredModel.name == ancestor
+                        )
+                    ).scalar_one_or_none()
+            sql_registered_model.parent_name = parent_name
+            sql_registered_model.last_updated_time = get_current_time_millis()
+            session.add(sql_registered_model)
+            session.flush()
+            return sql_registered_model.to_mlflow_entity()
 
     def _compute_next_token(self, max_results_for_query, current_size, offset, max_results):
         next_token = None
@@ -361,7 +441,7 @@ class SqlAlchemyStore(AbstractStore):
             comparator = f["comparator"]
             value = f["value"]
             if type_ == "attribute":
-                if key != "name":
+                if key not in ("name", "parent_name"):
                     raise MlflowException(
                         f"Invalid attribute name: {key}", error_code=INVALID_PARAMETER_VALUE
                     )
@@ -371,6 +451,12 @@ class SqlAlchemyStore(AbstractStore):
                         error_code=INVALID_PARAMETER_VALUE,
                     )
                 attr = getattr(SqlRegisteredModel, key)
+                if key == "parent_name" and value == "" and comparator in ("=", "!="):
+                    # `parent_name = ''` selects top-level models, `!= ''` selects sub-models.
+                    attribute_filters.append(
+                        attr.is_(None) if comparator == "=" else attr.isnot(None)
+                    )
+                    continue
                 attr_filter = SearchUtils.get_sql_comparison_func(comparator, dialect)(attr, value)
                 attribute_filters.append(attr_filter)
             elif type_ == "tag":

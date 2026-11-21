@@ -38,6 +38,7 @@ from mlflow.protos import databricks_pb2
 from mlflow.protos.databricks_pb2 import (
     BAD_REQUEST,
     INVALID_PARAMETER_VALUE,
+    NOT_IMPLEMENTED,
     RESOURCE_DOES_NOT_EXIST,
 )
 from mlflow.protos.mlflow_artifacts_pb2 import (
@@ -71,6 +72,7 @@ from mlflow.protos.model_registry_pb2 import (
     SearchRegisteredModels,
     SetModelVersionTag,
     SetRegisteredModelAlias,
+    SetRegisteredModelParent,
     SetRegisteredModelTag,
     TransitionModelVersionStage,
     UpdateModelVersion,
@@ -1659,12 +1661,23 @@ def _create_registered_model():
             "name": [_assert_string, _assert_required],
             "tags": [_assert_array],
             "description": [_assert_string],
+            "parent_name": [_assert_string],
         },
     )
-    registered_model = _get_model_registry_store().create_registered_model(
+    store = _get_model_registry_store()
+    kwargs = {}
+    if request_message.parent_name:
+        if not store.supports_model_hierarchy:
+            raise MlflowException(
+                "The configured model registry store does not support sub-models.",
+                error_code=NOT_IMPLEMENTED,
+            )
+        kwargs["parent_name"] = request_message.parent_name
+    registered_model = store.create_registered_model(
         name=request_message.name,
         tags=request_message.tags,
         description=request_message.description,
+        **kwargs,
     )
     response_message = CreateRegisteredModel.Response(registered_model=registered_model.to_proto())
     return _wrap_response(response_message)
@@ -1716,6 +1729,25 @@ def _rename_registered_model():
         name=name, new_name=new_name
     )
     response_message = RenameRegisteredModel.Response(registered_model=registered_model.to_proto())
+    return _wrap_response(response_message)
+
+
+@catch_mlflow_exception
+@_disable_if_artifacts_only
+def _set_registered_model_parent():
+    request_message = _get_request_message(
+        SetRegisteredModelParent(),
+        schema={
+            "name": [_assert_string, _assert_required],
+            "parent_name": [_assert_string],
+        },
+    )
+    registered_model = _get_model_registry_store().set_registered_model_parent(
+        name=request_message.name, parent_name=request_message.parent_name or None
+    )
+    response_message = SetRegisteredModelParent.Response(
+        registered_model=registered_model.to_proto()
+    )
     return _wrap_response(response_message)
 
 
@@ -2662,6 +2694,7 @@ HANDLERS = {
     DeleteRegisteredModel: _delete_registered_model,
     UpdateRegisteredModel: _update_registered_model,
     RenameRegisteredModel: _rename_registered_model,
+    SetRegisteredModelParent: _set_registered_model_parent,
     SearchRegisteredModels: _search_registered_models,
     GetLatestVersions: _get_latest_versions,
     CreateModelVersion: _create_model_version,

@@ -37,6 +37,11 @@ Model Alias
 Tags
     Tags are key-value pairs that you associate with registered models and model versions, allowing you to label and categorize them by function or status. For example, you could apply a tag with key ``"task"`` and value ``"question-answering"`` (displayed in the UI as ``task:question-answering``) to registered models intended for question answering tasks. At the model version level, you could tag versions undergoing pre-deployment validation with ``validation_status:pending`` and those cleared for deployment with ``validation_status:approved``.
 
+Sub-models (Model Hierarchy)
+    A registered model can optionally have a *parent* registered model, which lets you group related
+    models under a common "main" model and build a tree of any depth, e.g. ``fraud-detection`` →
+    ``fraud-card`` → ``fraud-card-xgb``. See :ref:`registered-model-hierarchy`.
+
 Annotations and Descriptions
     You can annotate the top-level model and each version individually using Markdown, including description and any relevant information useful for the team such as algorithm descriptions, dataset employed or methodology.
 
@@ -482,6 +487,63 @@ This outputs:
         "user_id": None,
         "version": 2,
     }
+
+.. _registered-model-hierarchy:
+
+Grouping Models into Sub-models
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Every registered model has an optional ``parent_name``. Setting it groups the model as a
+*sub-model* of another registered model. A parent is an ordinary registered model: it can have its
+own versions, aliases and tags, or act purely as a container. Hierarchies can be nested to any depth.
+
+.. code-block:: python
+
+    from mlflow import MlflowClient
+
+    client = MlflowClient()
+
+    # Create a parent and sub-models
+    client.create_registered_model("fraud-detection", description="All fraud models")
+    client.create_registered_model("fraud-card", parent_name="fraud-detection")
+    client.create_registered_model("fraud-wire", parent_name="fraud-detection")
+    client.create_registered_model("fraud-card-xgb", parent_name="fraud-card")
+
+    # Move an existing model under a parent, or detach it again
+    client.create_registered_model("fraud-ach")
+    client.set_registered_model_parent("fraud-ach", "fraud-detection")
+    client.set_registered_model_parent("fraud-ach", None)  # back to top-level
+
+    # Navigate the hierarchy
+    client.get_registered_model("fraud-card").parent_name  # 'fraud-detection'
+    client.get_sub_models("fraud-detection")  # direct children
+    client.get_sub_models("fraud-detection", recursive=True)  # all descendants
+
+    # Search filters
+    client.search_registered_models("parent_name = 'fraud-detection'")  # children of a model
+    client.search_registered_models("parent_name = ''")  # top-level models only
+    client.search_registered_models("parent_name != ''")  # all sub-models
+
+Rules enforced by the registry:
+
+* The parent must already exist, and a model cannot be its own ancestor (cycles are rejected with
+  ``INVALID_PARAMETER_VALUE``).
+* Renaming a parent automatically re-points its sub-models to the new name.
+* A model that still has sub-models cannot be deleted (``RESOURCE_CONFLICT``); delete or move its
+  sub-models first.
+* Sub-models are independent registered models: names stay globally unique, and
+  ``models:/<name>/<version>`` URIs are unchanged.
+
+REST API: ``CreateRegisteredModel`` accepts an optional ``parent_name``, every ``RegisteredModel``
+response includes ``parent_name`` when set, and the new endpoint
+``POST /api/2.0/mlflow/registered-models/set-parent`` with body
+``{"name": "...", "parent_name": "..."}`` moves a model (omit ``parent_name`` to detach it).
+
+In the UI, the model page shows a **Model hierarchy** section with the parent, a *Change parent*
+button and the list of sub-models; the registered models list has a **Parent model** column.
+
+.. note::
+    Sub-models are supported by the SQL (database) backend, the file backend, and remote tracking
+    servers running this version. Existing databases are upgraded with ``mlflow db upgrade``.
 
 Deleting MLflow Models
 ^^^^^^^^^^^^^^^^^^^^^^

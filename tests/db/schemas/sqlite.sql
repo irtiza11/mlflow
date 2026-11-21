@@ -41,6 +41,7 @@ CREATE TABLE registered_models (
 	creation_time BIGINT,
 	last_updated_time BIGINT,
 	description VARCHAR(5000),
+	parent_name VARCHAR(256),
 	CONSTRAINT registered_model_pk PRIMARY KEY (name),
 	UNIQUE (name)
 )

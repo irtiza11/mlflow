@@ -27,6 +27,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.protos.databricks_pb2 import (
     INVALID_PARAMETER_VALUE,
     RESOURCE_ALREADY_EXISTS,
+    RESOURCE_CONFLICT,
     RESOURCE_DOES_NOT_EXIST,
 )
 from mlflow.store.artifact.utils.models import _parse_model_uri
@@ -121,6 +122,8 @@ class FileStore(AbstractStore):
     CREATE_MODEL_VERSION_RETRIES = 3
     REGISTERED_MODELS_ALIASES_FOLDER_NAME = "aliases"
 
+    supports_model_hierarchy = True
+
     def __init__(self, root_directory=None):
         """
         Create a new FileStore with the given root directory.
@@ -177,7 +180,7 @@ class FileStore(AbstractStore):
         registered_model.last_updated_timestamp = updated_time
         self._save_registered_model_as_meta_file(registered_model)
 
-    def create_registered_model(self, name, tags=None, description=None):
+    def create_registered_model(self, name, tags=None, description=None, parent_name=None):
         """
         Create a new registered model in backend store.
 
@@ -186,6 +189,7 @@ class FileStore(AbstractStore):
             tags: A list of :py:class:`mlflow.entities.model_registry.RegisteredModelTag`
                 instances associated with this registered model.
             description: Description of the model.
+            parent_name: Optional name of an existing registered model to group this model under.
 
         Returns:
             A single object of :py:class:`mlflow.entities.model_registry.RegisteredModel`
@@ -198,6 +202,13 @@ class FileStore(AbstractStore):
         self._validate_registered_model_does_not_exist(name)
         for tag in tags or []:
             _validate_registered_model_tag(tag.key, tag.value)
+        parent_name = parent_name or None
+        if parent_name is not None:
+            if parent_name == name:
+                raise MlflowException.invalid_parameter_value(
+                    f"Registered model '{name}' cannot be its own parent."
+                )
+            self._validate_registered_model_exists(parent_name)
         meta_dir = self._get_registered_model_path(name)
         mkdir(meta_dir)
         creation_time = get_current_time_millis()
@@ -209,6 +220,7 @@ class FileStore(AbstractStore):
             description=description,
             latest_versions=latest_versions,
             tags=tags,
+            parent_name=parent_name,
         )
         self._save_registered_model_as_meta_file(
             registered_model, meta_dir=meta_dir, overwrite=False
@@ -216,6 +228,61 @@ class FileStore(AbstractStore):
         if tags is not None:
             for tag in tags:
                 self.set_registered_model_tag(name, tag)
+        return registered_model
+
+    def _validate_registered_model_exists(self, name):
+        if not exists(self._get_registered_model_path(name)):
+            raise MlflowException(
+                f"Registered Model with name={name} not found",
+                RESOURCE_DOES_NOT_EXIST,
+            )
+
+    def _read_registered_model_parent_name(self, model_path):
+        meta = FileStore._read_yaml(model_path, FileStore.META_DATA_FILE_NAME)
+        return meta.get("parent_name") or None
+
+    def _list_sub_model_names(self, name):
+        return [
+            os.path.basename(path)
+            for path in self._get_all_registered_model_paths()
+            if self._read_registered_model_parent_name(path) == name
+        ]
+
+    def set_registered_model_parent(self, name, parent_name):
+        """
+        Set (or clear) the parent of a registered model.
+
+        Args:
+            name: Registered model name.
+            parent_name: Name of the new parent registered model. ``None`` or an empty string
+                makes the model a top-level model.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+        """
+        parent_name = parent_name or None
+        registered_model = self.get_registered_model(name)
+        if parent_name is not None:
+            self._validate_registered_model_exists(parent_name)
+            ancestor, seen = parent_name, set()
+            while ancestor is not None:
+                if ancestor == name:
+                    raise MlflowException.invalid_parameter_value(
+                        f"Cannot set parent of registered model '{name}' to '{parent_name}': "
+                        "this would create a cycle in the model hierarchy."
+                    )
+                if ancestor in seen:  # defensive: pre-existing corrupt data
+                    break
+                seen.add(ancestor)
+                ancestor_path = self._get_registered_model_path(ancestor)
+                ancestor = (
+                    self._read_registered_model_parent_name(ancestor_path)
+                    if exists(ancestor_path)
+                    else None
+                )
+        registered_model.parent_name = parent_name
+        registered_model.last_updated_timestamp = get_current_time_millis()
+        self._save_registered_model_as_meta_file(registered_model)
         return registered_model
 
     def _get_registered_model_path(self, name):
@@ -292,6 +359,10 @@ class FileStore(AbstractStore):
                     for tag in mv.tags:
                         self.set_model_version_tag(new_name, mv.version, tag)
             shutil.rmtree(model_path)
+            for sub_model_name in self._list_sub_model_names(name):
+                sub_model = self.get_registered_model(sub_model_name)
+                sub_model.parent_name = new_name
+                self._save_registered_model_as_meta_file(sub_model)
         else:
             raise MlflowException(
                 f"Registered Model (name={new_name}) already exists.",
@@ -316,6 +387,16 @@ class FileStore(AbstractStore):
             raise MlflowException(
                 f"Registered Model with name={name} not found",
                 RESOURCE_DOES_NOT_EXIST,
+            )
+        sub_model_names = self._list_sub_model_names(name)
+        if sub_model_names:
+            shown = ", ".join(sorted(sub_model_names)[:5]) + (
+                ", ..." if len(sub_model_names) > 5 else ""
+            )
+            raise MlflowException(
+                f"Registered model '{name}' cannot be deleted because it has sub-models "
+                f"({shown}). Delete them or move them to another parent first.",
+                RESOURCE_CONFLICT,
             )
         shutil.rmtree(meta_dir)
 

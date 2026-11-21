@@ -20,6 +20,7 @@ from mlflow.protos.model_registry_pb2 import (
     SearchRegisteredModels,
     SetModelVersionTag,
     SetRegisteredModelAlias,
+    SetRegisteredModelParent,
     SetRegisteredModelTag,
     TransitionModelVersionStage,
     UpdateModelVersion,
@@ -50,6 +51,8 @@ class RestStore(BaseRestStore):
             is a function so that we can obtain fresh credentials in the case of expiry.
     """
 
+    supports_model_hierarchy = True
+
     def _get_response_from_method(self, method):
         return method.Response()
 
@@ -61,7 +64,7 @@ class RestStore(BaseRestStore):
 
     # CRUD API for RegisteredModel objects
 
-    def create_registered_model(self, name, tags=None, description=None):
+    def create_registered_model(self, name, tags=None, description=None, parent_name=None):
         """
         Create a new registered model in backend store.
 
@@ -70,6 +73,7 @@ class RestStore(BaseRestStore):
             tags: A list of :py:class:`mlflow.entities.model_registry.RegisteredModelTag`
                 instances associated with this registered model.
             description: Description of the model.
+            parent_name: Optional name of an existing registered model to group this model under.
 
         Returns:
             A single object of :py:class:`mlflow.entities.model_registry.RegisteredModel`
@@ -77,9 +81,29 @@ class RestStore(BaseRestStore):
         """
         proto_tags = [tag.to_proto() for tag in tags or []]
         req_body = message_to_json(
-            CreateRegisteredModel(name=name, tags=proto_tags, description=description)
+            CreateRegisteredModel(
+                name=name, tags=proto_tags, description=description, parent_name=parent_name
+            )
         )
         response_proto = self._call_endpoint(CreateRegisteredModel, req_body)
+        return RegisteredModel.from_proto(response_proto.registered_model)
+
+    def set_registered_model_parent(self, name, parent_name):
+        """
+        Set (or clear) the parent of a registered model.
+
+        Args:
+            name: Registered model name.
+            parent_name: Name of the new parent registered model. ``None`` or an empty string
+                makes the model a top-level model.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+        """
+        req_body = message_to_json(
+            SetRegisteredModelParent(name=name, parent_name=parent_name or None)
+        )
+        response_proto = self._call_endpoint(SetRegisteredModelParent, req_body)
         return RegisteredModel.from_proto(response_proto.registered_model)
 
     def update_registered_model(self, name, description):

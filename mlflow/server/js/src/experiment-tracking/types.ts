@@ -38,6 +38,8 @@ export interface ModelEntity {
   email_subscription_status: string;
   latest_versions: ModelVersionInfoEntity[];
   aliases?: ModelAliasMap;
+  /** Name of the parent registered model, if this model is a sub-model */
+  parent_name?: string;
 }
 
 /**

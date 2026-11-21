@@ -21,6 +21,7 @@ class RegisteredModel(_ModelRegistryEntity):
         latest_versions=None,
         tags=None,
         aliases=None,
+        parent_name=None,
     ):
         # Constructor is called only from within the system by various backend stores.
         super().__init__()
@@ -31,6 +32,7 @@ class RegisteredModel(_ModelRegistryEntity):
         self._latest_version = latest_versions
         self._tags = {tag.key: tag.value for tag in (tags or [])}
         self._aliases = {alias.alias: alias.version for alias in (aliases or [])}
+        self._parent_name = parent_name or None
 
     @property
     def name(self):
@@ -87,6 +89,15 @@ class RegisteredModel(_ModelRegistryEntity):
         """Dictionary of aliases (string) -> version for the current registered model."""
         return self._aliases
 
+    @property
+    def parent_name(self):
+        """String. Name of the parent registered model, or ``None`` for a top-level model."""
+        return self._parent_name
+
+    @parent_name.setter
+    def parent_name(self, parent_name):
+        self._parent_name = parent_name or None
+
     @classmethod
     def _properties(cls):
         # aggregate with base class properties since cls.__dict__ does not do it automatically
@@ -109,6 +120,7 @@ class RegisteredModel(_ModelRegistryEntity):
             proto.last_updated_timestamp,
             proto.description,
             [ModelVersion.from_proto(mvd) for mvd in proto.latest_versions],
+            parent_name=proto.parent_name if proto.HasField("parent_name") else None,
         )
         for tag in proto.tags:
             registered_model._add_tag(RegisteredModelTag.from_proto(tag))
@@ -126,6 +138,8 @@ class RegisteredModel(_ModelRegistryEntity):
             rmd.last_updated_timestamp = self.last_updated_timestamp
         if self.description:
             rmd.description = self.description
+        if self.parent_name:
+            rmd.parent_name = self.parent_name
         if self.latest_versions is not None:
             rmd.latest_versions.extend(
                 [model_version.to_proto() for model_version in self.latest_versions]

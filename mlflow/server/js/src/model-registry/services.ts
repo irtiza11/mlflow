@@ -40,6 +40,12 @@ export class Services {
     deleteJson({ relativeUrl: 'ajax-api/2.0/mlflow/registered-models/delete', data });
 
   /**
+   * Set (or clear) the parent of a registered model
+   */
+  static setRegisteredModelParent = (data: { name: string; parent_name?: string }) =>
+    postBigIntJson({ relativeUrl: 'ajax-api/2.0/mlflow/registered-models/set-parent', data });
+
+  /**
    * Set registered model tag
    */
   static setRegisteredModelTag = (data: any) =>

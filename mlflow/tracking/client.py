@@ -3061,7 +3061,11 @@ class MlflowClient:
     # Registered Model Methods
 
     def create_registered_model(
-        self, name: str, tags: Optional[Dict[str, Any]] = None, description: Optional[str] = None
+        self,
+        name: str,
+        tags: Optional[Dict[str, Any]] = None,
+        description: Optional[str] = None,
+        parent_name: Optional[str] = None,
     ) -> RegisteredModel:
         """
         Create a new registered model in backend store.
@@ -3071,6 +3075,8 @@ class MlflowClient:
             tags: A dictionary of key-value pairs that are converted into
                 :py:class:`mlflow.entities.model_registry.RegisteredModelTag` objects.
             description: Description of the model.
+            parent_name: (Optional) Name of an existing registered model under which to group
+                this model as a sub-model.
 
         Returns:
             A single object of :py:class:`mlflow.entities.model_registry.RegisteredModel`
@@ -3106,7 +3112,71 @@ class MlflowClient:
             description: This sentiment analysis model classifies the tone-happy, sad, angry.
 
         """
-        return self._get_registry_client().create_registered_model(name, tags, description)
+        return self._get_registry_client().create_registered_model(
+            name, tags, description, parent_name=parent_name
+        )
+
+    def set_registered_model_parent(self, name: str, parent_name: Optional[str]) -> RegisteredModel:
+        """
+        Group a registered model under a parent registered model, or detach it.
+
+        Args:
+            name: Name of the registered model to move.
+            parent_name: Name of the new parent registered model. ``None`` (or ``""``) makes the
+                model a top-level model again.
+
+        Returns:
+            A single updated :py:class:`mlflow.entities.model_registry.RegisteredModel` object.
+
+        .. code-block:: python
+            :caption: Example
+
+            from mlflow import MlflowClient
+
+            client = MlflowClient()
+            client.create_registered_model("fraud-detection")
+            client.create_registered_model("fraud-card-xgb")
+            client.set_registered_model_parent("fraud-card-xgb", "fraud-detection")
+            print(client.get_registered_model("fraud-card-xgb").parent_name)
+
+        .. code-block:: text
+            :caption: Output
+
+            fraud-detection
+        """
+        return self._get_registry_client().set_registered_model_parent(name, parent_name)
+
+    def get_sub_models(self, name: str, recursive: bool = False) -> List[RegisteredModel]:
+        """
+        List the sub-models grouped under a registered model.
+
+        Args:
+            name: Name of the parent registered model.
+            recursive: If ``True``, return every descendant (breadth-first) instead of only
+                direct children.
+
+        Returns:
+            A list of :py:class:`mlflow.entities.model_registry.RegisteredModel` objects.
+
+        .. code-block:: python
+            :caption: Example
+
+            from mlflow import MlflowClient
+
+            client = MlflowClient()
+            client.create_registered_model("fraud-detection")
+            client.create_registered_model("fraud-card", parent_name="fraud-detection")
+            client.create_registered_model("fraud-card-xgb", parent_name="fraud-card")
+            print([m.name for m in client.get_sub_models("fraud-detection")])
+            print([m.name for m in client.get_sub_models("fraud-detection", recursive=True)])
+
+        .. code-block:: text
+            :caption: Output
+
+            ['fraud-card']
+            ['fraud-card', 'fraud-card-xgb']
+        """
+        return self._get_registry_client().get_sub_models(name, recursive=recursive)
 
     def rename_registered_model(self, name: str, new_name: str) -> RegisteredModel:
         """Update registered model name.
