@@ -212,10 +212,18 @@ const mapDispatchToProps = {
   deleteRegisteredModelApi,
 };
 
-const ModelPageWithRouter = withRouterNext(
-  // @ts-expect-error TS(2769): No overload matches this call.
-  connect(mapStateToProps, mapDispatchToProps)(injectIntl(ModelPageImpl)),
+// @ts-expect-error TS(2769): No overload matches this call.
+const ConnectedModelPage = connect(mapStateToProps, mapDispatchToProps)(injectIntl(ModelPageImpl));
+
+/**
+ * Re-mount the page when navigating between models (e.g. via parent / sub-model links) so that
+ * data is re-fetched and per-model component state (description editor, tags form) is reset.
+ */
+const KeyedModelPage = (props: WithRouterNextProps<{ modelName: string }>) => (
+  <ConnectedModelPage key={props.params.modelName} {...props} />
 );
+
+const ModelPageWithRouter = withRouterNext(KeyedModelPage);
 
 export const ModelPage = withErrorBoundary(ErrorUtils.mlflowServices.MODEL_REGISTRY, ModelPageWithRouter);
 
