@@ -1,4 +1,4 @@
-# Sub-models for the MLflow Model Registry (fork of MLflow 2.17.0)
+# Sub-models for the MLflow Model Registry (fork of MLflow 2.17.2)
 
 This fork adds **hierarchical grouping of registered models**: any registered model can have a
 parent registered model, so related models can be organized under a "main" model in a tree of any
@@ -12,7 +12,28 @@ fraud-detection                (parent – can have its own versions, or just ac
 └── fraud-ach
 ```
 
-Base: tag `v2.17.0` → branch `feature/sub-models`.
+Base: tag `v2.17.2` → branch `sub-models`.
+
+## Install from this fork
+
+```bash
+git clone https://github.com/irtiza11/mlflow.git
+cd mlflow
+pip install -e .                                 # Python package + server (Python 3.9–3.11)
+
+# Build the web UI (Node 18+ and Yarn; needs ~8 GB RAM)
+cd mlflow/server/js
+yarn install --immutable
+yarn build
+cd ../../..
+
+# Existing MLflow database? Add the new column once:
+mlflow db upgrade <backend-store-uri>            # e.g. sqlite:///mlflow.db, postgresql://...
+
+mlflow server --backend-store-uri <backend-store-uri>
+```
+
+New databases get the column automatically. File-based stores (`./mlruns`) need no migration.
 
 ## Python API
 
